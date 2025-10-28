@@ -17,9 +17,9 @@
 using namespace Menu;
 
 // ===== Display / fonts =====
-#define fontName u8g2_font_5x8_tf
-#define fontX 6
-#define fontY 10
+#define fontName u8g2_font_5x8_tf   // keep for your custom screens
+#define fontX 7                      // wider cells for submenu
+#define fontY 12                     // taller cells for submenu
 #define offsetX 0
 #define offsetY 0
 #define U8_Width 128
@@ -37,18 +37,42 @@ static const colorDef<uint8_t> colors[6] MEMMODE={
   {{1,1},{1,0,0}},
 };
 
-// ===== Password dialog =====
+// ===== Password / unlock =====
 static bool passwordVisible=false;
 static uint8_t passDigits[4]={0,0,0,0};
 static uint8_t passIndex=0;
 static const uint8_t PASSWORD[4]={1,0,0,1};
 static bool passWrong=false;
-static bool passwordVerified=false;   // one-shot gate to enter Settings after success
+// Keep Settings unlocked until we return to Idle
+static bool settingsUnlocked=false;
 
 // ===== UI state =====
 static volatile UIMode uiMode=UI_IDLE;
 static unsigned long lastInputMs=0;
 static const unsigned long MENU_TIMEOUT_MS=60000UL;
+
+// ===== Horizontal main menu =====
+static const char* MAIN_LABELS[4] = {"Status","Alarms","Settings","About"};
+static uint8_t mainIdx = 0;
+static const uint8_t MAIN_COUNT = 4;
+
+static const uint8_t WIN_SIZE = 2;
+static uint8_t winStart = 0;       // index of left tile in the window
+
+// ----- Idle page cycling -----
+static uint8_t idleCaseIndex = 0; 
+
+static inline void ensureWindow(){
+  // keep mainIdx visible inside [winStart, winStart+WIN_SIZE-1]
+  if(mainIdx < winStart) winStart = mainIdx;
+  else if(mainIdx >= winStart + WIN_SIZE) winStart = mainIdx - (WIN_SIZE - 1);
+
+  // clamp for safety
+  if(winStart + WIN_SIZE > MAIN_COUNT) {
+    winStart = (MAIN_COUNT >= WIN_SIZE) ? (MAIN_COUNT - WIN_SIZE) : 0;
+  }
+}
+
 
 // Accel for long-press digit nav
 static unsigned long digitHoldStartMsUp=0, digitHoldStartMsDown=0;
@@ -73,6 +97,7 @@ static FanAnimator fans(u8g2);
 static const uint8_t BTN_Q_SIZE=8;
 static volatile uint8_t qHead=0,qTail=0;
 static char btnQueue[BTN_Q_SIZE];
+
 
 class ButtonsIn:public menuIn{
 public:
@@ -101,9 +126,9 @@ static OneButton btnEsc(BTN_ESC,true,true);
 
 // ===== Menu geometry =====
 #define MAX_DEPTH 6
-#define MENU_PX_W 124
-#define MENU_COLS (MENU_PX_W/6)        // menu uses a tighter font in draw
-#define MENU_ROWS (U8_Height/10)
+#define MENU_PX_W 160
+#define MENU_COLS (MENU_PX_W / fontX)  // auto from fontX (now 7)
+#define MENU_ROWS 5                    // fixed: 5 rows in submenu
 
 // Render throttle
 static const uint16_t FRAME_MS=25;
@@ -111,6 +136,13 @@ static unsigned long lastFrameMs=0;
 
 // ===== Forward decls =====
 static result doFactoryReset(eventMask, prompt&);
+static result onEnterSettings(eventMask, prompt&);
+// Forward-declare goIdle so handlers can call it before nav exists
+static inline void goIdle();
+
+// ===== Helpers =====
+static void passReset(){ passDigits[0]=passDigits[1]=passDigits[2]=passDigits[3]=0; passIndex=0; passWrong=false; }
+static bool passIsCorrect(){ for(int i=0;i<4;i++) if(passDigits[i]!=PASSWORD[i]) return false; return true; }
 
 #ifndef ROFIELD
 #define ROFIELD(target,label,units,low,high,step,tune) \
@@ -136,15 +168,15 @@ MENU(MenuAlarms,"Alarms",doNothing,noEvent,noStyle
 )
 
 MENU(MenuTempSettings,"TemperatureSettings",doNothing,noEvent,noStyle
-  ,FIELD(gStage.tempThrL,"TempeThresholdL","C",-40,125,1,0,doNothing,noEvent,noStyle)
-  ,FIELD(gStage.tempThrH,"TempThresholdH","C",-40,125,1,0,doNothing,noEvent,noStyle)
-  ,FIELD(gStage.tempHighThr,"TempHiThreshold","C",-40,125,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.tempThrL,"TempThresLOW","C",-40,125,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.tempThrH,"TempThreHIGH","C",-40,125,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.tempHighThr,"TempHIGHThres","C",-40,125,1,0,doNothing,noEvent,noStyle)
   ,EXIT("<Back")
 );
 
 MENU(MenuSystemSettings,"SystemSettings",doNothing,noEvent,noStyle
-  ,FIELD(gStage.voltLThrV,"VoltLThreshold","V",0,300,1,0,doNothing,noEvent,noStyle)
-  ,FIELD(gStage.voltHighThrV,"VoltHThreshold","V",0,300,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.voltLThrV,"VoltLOWThres","V",0,300,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.voltHighThrV,"VoltHIGHThres","V",0,300,1,0,doNothing,noEvent,noStyle)
   ,EXIT("<Back")
 );
 
@@ -166,7 +198,7 @@ SELECT(gStage.fan1Model, MenuFan1Model,"Fan1Model",doNothing,noEvent,noStyle
 
 MENU(Fan1Settings,"Fan 1 Settings",doNothing,noEvent,noStyle
   ,SUBMENU(MenuFan1Model)
-  ,FIELD(gStage.fan1nominal,"NomFan1Current","mA",0,10000,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.fan1nominal,"NomFan1Curr","mA",0,10000,1,0,doNothing,noEvent,noStyle)
   ,EXIT("<Back")
 );
 
@@ -178,7 +210,7 @@ SELECT(gStage.fan2Model, MenuFan2Model,"Fan2Model",doNothing,noEvent,noStyle
 
 MENU(Fan2Settings,"Fan 2 Settings",doNothing,noEvent,noStyle
   ,SUBMENU(MenuFan2Model)
-  ,FIELD(gStage.fan2nominal,"NomFan2Current","mA",0,10000,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.fan2nominal,"NomFan2Curr","mA",0,10000,1,0,doNothing,noEvent,noStyle)
   ,EXIT("<Back")
 );
 
@@ -206,11 +238,19 @@ MENU(MenuModbusSettings,"ModbusSettings",doNothing,noEvent,noStyle
 );
 
 MENU(MenuAviationSettings,"AviationSettings",doNothing,noEvent,noStyle
-  ,FIELD(gStage.LDRThreshold,"AviLDRThreshold","LUX",1,247,1,0,doNothing,noEvent,noStyle)
+  ,FIELD(gStage.LDRThreshold,"AviLDRThres","LUX",1,247,1,0,doNothing,noEvent,noStyle)
   ,EXIT("<Back")
 );
 
-static result onEnterSettings(eventMask, prompt&);
+// Gate Settings with password unless unlocked
+static result onEnterSettings(eventMask, prompt&){
+  if(!settingsUnlocked){
+    passwordVisible=true; passReset();
+    return quit;
+  }
+  return proceed;
+}
+
 MENU(MenuSettings,"Settings",onEnterSettings,enterEvent,noStyle
   ,SUBMENU(MenuTempSettings)
   ,SUBMENU(MenuSystemSettings)
@@ -229,7 +269,7 @@ MENU(MenuAbout,"About",doNothing,noEvent,noStyle
   ,EXIT("<Back")
 );
 
-MENU(mainMenu,"Main",doNothing,noEvent,wrapStyle
+MENU(mainMenu,"Main",doNothing,noEvent,noStyle
   ,SUBMENU(MenuStatus)
   ,SUBMENU(MenuAlarms)
   ,SUBMENU(MenuSettings)
@@ -237,8 +277,8 @@ MENU(mainMenu,"Main",doNothing,noEvent,wrapStyle
 );
 
 // ===== IO glue + NAVROOT =====
-static serialIn serial(Serial);
-MENU_INPUTS(in,&btnInput,&serial)
+// static serialIn serial(Serial);
+MENU_INPUTS(in,&btnInput)
 MENU_OUTPUTS(out,MAX_DEPTH
   ,U8G2_OUT(u8g2,colors,fontX,fontY,offsetX,offsetY,{0,0,MENU_COLS,MENU_ROWS})
   ,SERIAL_OUT(Serial)
@@ -246,6 +286,124 @@ MENU_OUTPUTS(out,MAX_DEPTH
 NAVROOT(nav,mainMenu,MAX_DEPTH,in,out);
 
 static bool atRoot(){ return nav.level==0; }
+
+// Now that nav exists, define goIdle
+static inline void goIdle(){
+  confirmVisible=false;
+  passwordVisible=false;
+  uiMode=UI_IDLE;
+  btnInput.flush();
+  nav.reset();
+  settingsUnlocked=false;
+  mainIdx = 0;
+}
+
+
+static void openMainFromIndex(uint8_t idx){
+  if (idx >= MAIN_COUNT) idx = MAIN_COUNT - 1;
+
+  uiMode = UI_MENU;
+  btnInput.flush();
+
+  // Start clean at root
+  nav.reset();
+
+  // Make absolutely sure we're at the first root item (Status)
+  // Send several UPs so even if wrap is on or selection is weird, we end up at top.
+  for (uint8_t k = 0; k < 8; ++k) {
+    nav.doNav(upCmd);
+  }
+
+  // Now step down to the desired tile
+  for (uint8_t k = 0; k < idx; ++k) {
+    nav.doNav(downCmd);
+  }
+
+  // Enter the selected submenu
+  nav.doNav(enterCmd);
+}
+
+static void drawMainMenuHorizontal(){
+  // Title
+  u8g2.setFont(u8g2_font_5x7_tr);
+  u8g2.setDrawColor(1);
+  u8g2.drawStr(2,9,"Main");
+
+  ensureWindow();
+
+  // Layout for exactly 2 tiles centered on 128x64
+  const int tileW = 56;      // wider for image+label
+  const int tileH = 40;      // taller bar
+  const int gap   = 6;       // spacing between tiles
+  const int totalW = 2*tileW + gap;
+  const int startX = (U8_Width - totalW)/2; // centered
+  const int topY   = 14;                     // below the title
+
+  for(uint8_t lane=0; lane<WIN_SIZE; ++lane){
+    uint8_t item = winStart + lane;
+    if(item >= MAIN_COUNT) break;
+
+    int x = startX + lane*(tileW+gap);
+    int y = topY;
+
+    bool selected = (item == mainIdx);
+
+    // Tile
+    if(selected){
+      u8g2.drawBox(x,y,tileW,tileH);    // filled when selected
+      u8g2.setDrawColor(0);
+    } else {
+      u8g2.drawFrame(x,y,tileW,tileH);  // outline when not selected
+      u8g2.setDrawColor(1);
+    }
+
+    // --- [ICON SLOT] ---
+    // Use 24x24 px XBM icons here
+    {
+      const int iconW = 24, iconH = 24;
+      const int ix = x + (tileW - iconW)/2;
+      const int iy = y + 6;
+
+      // choose per-tile icon
+      const uint8_t* bmp = ICON_STATUS_24;
+      switch (item) {
+        case 0: bmp = ICON_STATUS_24;   break; // "Status"
+        case 1: bmp = ICON_ALARMS_24;   break; // "Alarms"
+        case 2: bmp = ICON_SETTINGS_24; break; // "Settings"
+        case 3: bmp = ICON_ABOUT_24;    break; // "About"
+      }
+
+      // Draw one bitmap for both states:
+      // - Not selected: draw color = 1 → white on black
+      // - Selected:     we filled tile (white) and set draw color = 0 → black on white
+      u8g2.drawXBMP(ix, iy, iconW, iconH, bmp);
+    }
+
+    // Label at bottom of tile
+    {
+      const char* lbl = MAIN_LABELS[item];
+
+      // Make sure the same font is active for measuring & drawing
+      u8g2.setFont(u8g2_font_5x7_tr);
+
+      int w  = u8g2.getStrWidth(lbl);           // pixel width of the label
+      int tx = x + (tileW - w) / 2;             // center within the tile
+      int ty = y + tileH - 2;                   // baseline near bottom
+
+      u8g2.drawStr(tx, ty, lbl);
+    }
+
+    // restore draw color if it was inverted
+    if(selected) u8g2.setDrawColor(1);
+  }
+
+  // Optional left/right indicators
+  if(winStart > 0)                   u8g2.drawTriangle(2, 32, 6, 28, 6, 36);          // left arrow
+  if(winStart+WIN_SIZE<MAIN_COUNT)   u8g2.drawTriangle(126, 32, 122,28,122,36);       // right arrow
+}
+
+
+
 
 // ===== Drawing helpers =====
 static void drawIdleScreen(){
@@ -255,32 +413,45 @@ static void drawIdleScreen(){
   u8g2.setBitmapMode(1);
   u8g2.drawStr(2,9,"SARBS ODCC Plus Status");
   char line[24];
-  snprintf(line,sizeof(line),"Temp: %d C",statusTempC); u8g2.drawStr(2,20,line);
-  snprintf(line,sizeof(line),"Vin : %d V",statusVinV);  u8g2.drawStr(2,30,line);
-  if(alarmDoor == 1)
-  {
-  u8g2.drawXBMP(2, 55, 8, 8, ICON_DOOR_8);
+
+  switch (idleCaseIndex) {
+    case 0: // Temp / Vin
+      snprintf(line, sizeof(line), "Temp: %d C", statusTempC);
+      u8g2.drawStr(2,20,line);
+      snprintf(line, sizeof(line), "Vin : %d V", statusVinV);
+      u8g2.drawStr(2,30,line);
+      break;
+
+    case 1: // F1C / F2C (mA)
+      snprintf(line, sizeof(line), "F1C: %dmA", fan1Current_mA);
+      u8g2.drawStr(2,20,line);
+      snprintf(line, sizeof(line), "F2C: %dmA", fan2Current_mA);
+      u8g2.drawStr(2,30,line);
+      break;
+
+    case 2: // F1P / F2P (W)
+      snprintf(line, sizeof(line), "F1P: %dW", fan1Power_W);
+      u8g2.drawStr(2,20,line);
+      snprintf(line, sizeof(line), "F2P: %dW", fan2Power_W);
+      u8g2.drawStr(2,30,line);
+      break;
   }
-  if(alarmWater == 1)
-  {
-  u8g2.drawXBMP(14, 55, 8, 8, ICON_WATER_8);
-  }
-  if(alarmSmoke == 1)
-  {
-  u8g2.drawXBMP(26, 55, 8, 8, ICON_SMOKE_8);
-  }
-  if(alarmTemp == 1)
-  {
-  u8g2.drawXBMP(38, 55, 8, 8, ICON_FIRE_8);
-  }
-  if(alarmFanFault == 1)
-  {
-  u8g2.drawXBMP(50, 55, 8, 8, ICON_FAN_8);
-  }
-  if(alarmAviation == 1)
-  {
-  u8g2.drawXBMP(62, 55, 8, 8, ICON_LIGHT_8);
-  }
+
+  snprintf(line,sizeof(line),"F1: %dM",fan1Run_m); u8g2.drawStr(80,35,line); 
+  snprintf(line,sizeof(line),"F2: %dM",fan2Run_m); u8g2.drawStr(80,65,line);
+
+  // if(alarmDoor == 1){     u8g2.drawXBMP(2, 36, 16, 16, ICON_DOOR_16);  }
+  // if(alarmWater == 1){    u8g2.drawXBMP(26, 36, 16, 16, ICON_WATER_16); }
+  // if(alarmSmoke == 1){    u8g2.drawXBMP(50, 36, 16, 16, ICON_SMOKE_16); }
+  // if(alarmTemp == 1){     u8g2.drawXBMP(14, 49, 16, 16, ICON_FIRE_16); }
+  // if(alarmFanFault == 1){ u8g2.drawXBMP(38, 49, 16, 16, ICON_FAN_16);  }
+  // if(alarmAviation == 1){ u8g2.drawXBMP(62, 49, 16, 16, ICON_LIGHT_16); }
+  u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  
+  u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16);
+  u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16);
+  u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); 
+  u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  
+  u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16);
   fans.draw();
 }
 
@@ -303,10 +474,6 @@ static void drawConfirmDialog(){
     }
   }
 }
-
-// Password UI
-static void passReset(){ passDigits[0]=passDigits[1]=passDigits[2]=passDigits[3]=0; passIndex=0; passWrong=false; }
-static bool passIsCorrect(){ for(int i=0;i<4;i++) if(passDigits[i]!=PASSWORD[i]) return false; return true; }
 
 static void drawPasswordDialog(){
   u8g2.setDrawColor(0); u8g2.drawBox(0,0,U8_Width,U8_Height);
@@ -333,16 +500,6 @@ static void drawPasswordDialog(){
   else          u8g2.drawStr(x+4,y+h-4,"Up/Dn=edit ENT=next ESC=prev");
 }
 
-// ===== Menu enter guard for Settings =====
-static result onEnterSettings(eventMask, prompt&){
-  if(!passwordVerified){
-    passwordVisible=true; passReset();
-    return quit;
-  }
-  passwordVerified=false;   // one-shot allow
-  return proceed;
-}
-
 // ===== Actions =====
 static result doFactoryReset(eventMask, prompt&){
   Serial.println("[FactoryReset] Requested!");
@@ -355,26 +512,64 @@ static void setupButtonHandlers(){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passDigits[passIndex]=(uint8_t)((passDigits[passIndex]+1)%10); return; }
     if(confirmVisible){ if(confirmIdx>0) confirmIdx--; return; }
+
+    if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
+      if(mainIdx + 1 < MAIN_COUNT){
+        mainIdx++;            // LEFT
+      }
+      return;
+    }
+
+    // If we're in idle screen, cycle the idle case pages
+    if (uiMode == UI_IDLE) {
+      idleCaseIndex = (uint8_t)((idleCaseIndex + 1) % 3);
+      return;                 // don't pass to menu nav when idle
+    }
+
     if(uiMode==UI_MENU||uiMode==UI_SUBMENU) pushCmd(defaultNavCodes[upCmd].ch);
   });
 
+  // Down: move right at root AND tell ArduinoMenu to move down too
   btnDown.attachClick([](){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passDigits[passIndex]=(uint8_t)((passDigits[passIndex]+9)%10); return; }
     if(confirmVisible){ if(confirmIdx<2) confirmIdx++; return; }
+
+    if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
+      if(mainIdx > 0){
+        mainIdx--;            // RIGHT
+      }
+      return;
+    }
+
+    // If we're in idle screen, cycle the idle case pages
+    if (uiMode == UI_IDLE) {
+      idleCaseIndex = (uint8_t)((idleCaseIndex +3 - 1) % 3);
+      return;                 // don't pass to menu nav when idle
+    }
+
     if(uiMode==UI_MENU||uiMode==UI_SUBMENU) pushCmd(defaultNavCodes[downCmd].ch);
   });
 
+  // Enter: at root, just forward ENTER (nav already points to same item)
   btnEnter.attachClick([](){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passIndex=(uint8_t)((passIndex+1)%4); return; }
     if(confirmVisible){
       if(confirmIdx==0) stageApply();
-      if(confirmIdx==0||confirmIdx==1){ confirmVisible=false; uiMode=UI_IDLE; btnInput.flush(); nav.reset(); return; }
+      if(confirmIdx==0||confirmIdx==1){ goIdle(); return; }
       confirmVisible=false; return;
     }
+
+    if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
+      openMainFromIndex(MAIN_COUNT-mainIdx-1);   // open the tile the user sees
+      return;
+    }
+
+
     if(uiMode==UI_MENU||uiMode==UI_SUBMENU) pushCmd(defaultNavCodes[enterCmd].ch);
   });
+
 
   btnEsc.attachClick([](){
     lastInputMs=millis();
@@ -388,11 +583,12 @@ static void setupButtonHandlers(){
     lastInputMs=millis();
     if(passwordVisible){
       if(passIsCorrect()){
-        passwordVerified=true;
+        settingsUnlocked=true;               // keep unlocked until Idle
         passwordVisible=false; passWrong=false; passReset();
         pushCmd(defaultNavCodes[enterCmd].ch);   // immediately enter Settings
       } else {
-        passwordVerified=false; passWrong=true;
+        settingsUnlocked=false;
+        passWrong=true;
       }
       return;
     }
@@ -405,7 +601,7 @@ static void setupButtonHandlers(){
     if(passwordVisible){ passwordVisible=false; passReset(); passWrong=false; uiMode=UI_MENU; return; }
     if(uiMode==UI_MENU||uiMode==UI_SUBMENU){
       if(settingsDirty()){ confirmVisible=true; confirmIdx=0; }
-      else { confirmVisible=false; uiMode=UI_IDLE; btnInput.flush(); nav.reset(); }
+      else { goIdle(); } // relock on Idle
     }
   });
 
@@ -440,7 +636,7 @@ static void setupButtonHandlers(){
   btnUp.attachDuringLongPress(sendRightIfEditing);
   btnDown.attachDuringLongPress(sendLeftIfEditing);
 
-  btnUp.setClickTicks(60);    btnDown.setClickTicks(60);
+  btnUp.setClickTicks(60);     btnDown.setClickTicks(60);
   btnEnter.setClickTicks(220); btnEsc.setClickTicks(220);
   btnUp.setPressTicks(450);    btnDown.setPressTicks(450);
   btnUp.setDebounceTicks(2);   btnDown.setDebounceTicks(2);
@@ -481,33 +677,49 @@ void uiLoop(){
   if ((now / 5000) % 2 == 0) {
     fans.setFanSpeed(0, 50);   // first 5s = fast
   } else {
-    fans.setFanSpeed(0, 800);   // next 5s = slow
+    fans.setFanSpeed(0, 800);  // next 5s = slow
   }
 
   if(uiMode==UI_IDLE) fans.update();
 
   if(!confirmVisible && !passwordVisible && (uiMode==UI_MENU || uiMode==UI_SUBMENU)){
-    nav.doInput();
-    uiMode=(nav.level==0)?UI_MENU:UI_SUBMENU;
-    if(millis()-lastInputMs>MENU_TIMEOUT_MS){
+    nav.doInput();                                // <-- IMPORTANT: always run
+    uiMode = (nav.level==0) ? UI_MENU : UI_SUBMENU;
+
+    if(millis()-lastInputMs > MENU_TIMEOUT_MS){
       stageDiscard();
       confirmVisible=false; passwordVisible=false;
-      uiMode=UI_IDLE; btnInput.flush(); nav.reset();
+      goIdle();
     }
   }
 
   unsigned long now1=millis();
   if(now1-lastFrameMs<FRAME_MS) return;
-  lastFrameMs=now;
+  lastFrameMs=now1;
 
   u8g2.firstPage();
   do{
+    // inside the page loop:
     if(uiMode==UI_MENU || uiMode==UI_SUBMENU){
-      if(confirmVisible)      drawConfirmDialog();
-      else if(passwordVisible)drawPasswordDialog();
-      else {u8g2.setDrawColor(1);  u8g2.setFont(u8g2_font_5x7_tr); nav.doOutput(); }   // menu-only font
+      if(confirmVisible)       drawConfirmDialog();
+      else if(passwordVisible) drawPasswordDialog();
+      else {
+        if(atRoot()){
+            // Just draw your custom 2-tile carousel; don’t push nav commands here.
+            u8g2.setDrawColor(1);
+            u8g2.setFont(u8g2_font_5x7_tr);
+            drawMainMenuHorizontal();
+          }
+        else {
+          // normal submenus
+          u8g2.setDrawColor(1);
+          u8g2.setFont(u8g2_font_6x10_tf);
+          nav.doOutput();
+        }
+      }
     } else {
       drawIdleScreen();
     }
+
   } while(u8g2.nextPage());
 }

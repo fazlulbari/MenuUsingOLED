@@ -5,6 +5,14 @@
 extern int16_t statusTempC;
 extern int16_t statusVinV;
 
+// Fan telemetry (provide these from your measurement code)
+extern int16_t fan1Current_mA;
+extern int16_t fan2Current_mA;
+extern int16_t fan1Power_W;
+extern int16_t fan2Power_W;
+extern int16_t fan1Run_m;
+extern int16_t fan2Run_m;
+
 // Alarms (shown in menu but not committed; you can keep them read-only in logic)
 extern bool alarmDoor, alarmWater, alarmSmoke, alarmTemp, alarmFanFault, alarmAviation;
 
