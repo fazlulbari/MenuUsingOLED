@@ -327,79 +327,105 @@ static void drawMainMenuHorizontal(){
   // Title
   u8g2.setFont(u8g2_font_5x7_tr);
   u8g2.setDrawColor(1);
-  u8g2.drawStr(2,9,"Main");
+  u8g2.drawStr(55, 9, "Main");
 
-  ensureWindow();
+  // ----- geometry -----
+  const int Y_TOP = 14;
 
-  // Layout for exactly 2 tiles centered on 128x64
-  const int tileW = 56;      // wider for image+label
-  const int tileH = 40;      // taller bar
-  const int gap   = 6;       // spacing between tiles
-  const int totalW = 2*tileW + gap;
-  const int startX = (U8_Width - totalW)/2; // centered
-  const int topY   = 14;                     // below the title
+  // center (selected) tile
+  const int C_W = 56, C_H = 40;
+  const int C_ICON_W = 24, C_ICON_H = 24;
 
-  for(uint8_t lane=0; lane<WIN_SIZE; ++lane){
-    uint8_t item = winStart + lane;
-    if(item >= MAIN_COUNT) break;
+  // side (unselected) tiles
+  const int S_W = 36, S_H = 28;
+  const int S_ICON_W = 16, S_ICON_H = 16;
 
-    int x = startX + lane*(tileW+gap);
-    int y = topY;
+  const int GAP_CS = 6; // gap between center and a side
 
-    bool selected = (item == mainIdx);
+  // total width: [S_W] + GAP_CS + [C_W] + GAP_CS + [S_W]
+  const int TOTAL_W = S_W + GAP_CS + C_W + GAP_CS + S_W;
+  const int X0 = (U8_Width - TOTAL_W) / 2;
 
-    // Tile
-    if(selected){
-      u8g2.drawBox(x,y,tileW,tileH);    // filled when selected
-      u8g2.setDrawColor(0);
-    } else {
-      u8g2.drawFrame(x,y,tileW,tileH);  // outline when not selected
-      u8g2.setDrawColor(1);
+  // figure out neighbors with wrap
+  auto wrap = [](int v, int mod)->uint8_t {
+    int r = v % mod; if (r < 0) r += mod; return (uint8_t)r;
+  };
+  const uint8_t sel   = mainIdx;
+  const uint8_t left  = wrap(sel - 1, MAIN_COUNT);
+  const uint8_t right = wrap(sel + 1, MAIN_COUNT);
+
+  // ----- helpers -----
+  auto icon24For = [](uint8_t item)->const uint8_t* {
+    switch(item){
+      case 0: return ICON_STATUS_24;
+      case 1: return ICON_ALARMS_24;
+      case 2: return ICON_SETTINGS_24;
+      default:return ICON_ABOUT_24;
     }
-
-    // --- [ICON SLOT] ---
-    // Use 24x24 px XBM icons here
-    {
-      const int iconW = 24, iconH = 24;
-      const int ix = x + (tileW - iconW)/2;
-      const int iy = y + 6;
-
-      // choose per-tile icon
-      const uint8_t* bmp = ICON_STATUS_24;
-      switch (item) {
-        case 0: bmp = ICON_STATUS_24;   break; // "Status"
-        case 1: bmp = ICON_ALARMS_24;   break; // "Alarms"
-        case 2: bmp = ICON_SETTINGS_24; break; // "Settings"
-        case 3: bmp = ICON_ABOUT_24;    break; // "About"
-      }
-
-      // Draw one bitmap for both states:
-      // - Not selected: draw color = 1 → white on black
-      // - Selected:     we filled tile (white) and set draw color = 0 → black on white
-      u8g2.drawXBMP(ix, iy, iconW, iconH, bmp);
+  };
+  auto icon16For = [](uint8_t item)->const uint8_t* {
+    switch(item){
+      case 0: return ICON_STATUS_16;
+      case 1: return ICON_ALARMS_16;
+      case 2: return ICON_SETTINGS_16;
+      default:return ICON_ABOUT_16;
     }
+  };
+  auto labelFor = [](uint8_t item)->const char* {
+    return MAIN_LABELS[item];
+  };
 
-    // Label at bottom of tile
-    {
-      const char* lbl = MAIN_LABELS[item];
-
-      // Make sure the same font is active for measuring & drawing
-      u8g2.setFont(u8g2_font_5x7_tr);
-
-      int w  = u8g2.getStrWidth(lbl);           // pixel width of the label
-      int tx = x + (tileW - w) / 2;             // center within the tile
-      int ty = y + tileH - 2;                   // baseline near bottom
-
-      u8g2.drawStr(tx, ty, lbl);
-    }
-
-    // restore draw color if it was inverted
-    if(selected) u8g2.setDrawColor(1);
+  // ----- draw LEFT small tile -----
+  {
+    const int x = X0 + 4;
+    const int y = Y_TOP;
+    u8g2.drawFrame(x, y, S_W, S_H);
+    // icon
+    const int ix = x + (S_W - S_ICON_W)/2;
+    const int iy = y + 4;
+    u8g2.drawXBMP(ix, iy, S_ICON_W, S_ICON_H, icon16For(left));
+    // label
+    u8g2.setFont(u8g2_font_4x6_tr);
+    int w = u8g2.getStrWidth(labelFor(left));
+    u8g2.drawStr(x + (S_W - w)/2, y + S_H - 2, labelFor(left));
   }
 
-  // Optional left/right indicators
-  if(winStart > 0)                   u8g2.drawTriangle(2, 32, 6, 28, 6, 36);          // left arrow
-  if(winStart+WIN_SIZE<MAIN_COUNT)   u8g2.drawTriangle(126, 32, 122,28,122,36);       // right arrow
+  // ----- draw CENTER selected tile (filled) -----
+  {
+    const int x = X0 + S_W + GAP_CS;
+    const int y = Y_TOP;
+
+    u8g2.drawBox(x, y, C_W, C_H);    // selected = filled
+    u8g2.setDrawColor(0);            // invert content on white box
+
+    // icon
+    const int ix = x + (C_W - C_ICON_W)/2;
+    const int iy = y + 6;
+    u8g2.drawXBMP(ix, iy, C_ICON_W, C_ICON_H, icon24For(sel));
+
+    // label
+    u8g2.setFont(u8g2_font_5x7_tr);
+    int w = u8g2.getStrWidth(labelFor(sel));
+    u8g2.drawStr(x + (C_W - w)/2, y + C_H - 2, labelFor(sel));
+
+    u8g2.setDrawColor(1);            // restore
+  }
+
+  // ----- draw RIGHT small tile -----
+  {
+    const int x = X0 + S_W + GAP_CS + C_W + GAP_CS - 4;
+    const int y = Y_TOP;
+    u8g2.drawFrame(x, y, S_W, S_H);
+    // icon
+    const int ix = x + (S_W - S_ICON_W)/2;
+    const int iy = y + 4;
+    u8g2.drawXBMP(ix, iy, S_ICON_W, S_ICON_H, icon16For(right));
+    // label
+    u8g2.setFont(u8g2_font_4x6_tr);
+    int w = u8g2.getStrWidth(labelFor(right));
+    u8g2.drawStr(x + (S_W - w)/2, y + S_H - 2, labelFor(right));
+  }
+
 }
 
 
@@ -440,18 +466,18 @@ static void drawIdleScreen(){
   snprintf(line,sizeof(line),"F1: %dM",fan1Run_m); u8g2.drawStr(80,35,line); 
   snprintf(line,sizeof(line),"F2: %dM",fan2Run_m); u8g2.drawStr(80,65,line);
 
-  // if(alarmDoor == 1){     u8g2.drawXBMP(2, 36, 16, 16, ICON_DOOR_16);  }
-  // if(alarmWater == 1){    u8g2.drawXBMP(26, 36, 16, 16, ICON_WATER_16); }
-  // if(alarmSmoke == 1){    u8g2.drawXBMP(50, 36, 16, 16, ICON_SMOKE_16); }
-  // if(alarmTemp == 1){     u8g2.drawXBMP(14, 49, 16, 16, ICON_FIRE_16); }
-  // if(alarmFanFault == 1){ u8g2.drawXBMP(38, 49, 16, 16, ICON_FAN_16);  }
-  // if(alarmAviation == 1){ u8g2.drawXBMP(62, 49, 16, 16, ICON_LIGHT_16); }
-  u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  
-  u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16);
-  u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16);
-  u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); 
-  u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  
-  u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16);
+  if(alarmDoor == 1){     u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  }
+  if(alarmWater == 1){    u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16); }
+  if(alarmSmoke == 1){    u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16); }
+  if(alarmTemp == 1){     u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); }
+  if(alarmFanFault == 1){ u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  }
+  if(alarmAviation == 1){ u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16); }
+  // u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  
+  // u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16);
+  // u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16);
+  // u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); 
+  // u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  
+  // u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16);
   fans.draw();
 }
 
@@ -514,11 +540,10 @@ static void setupButtonHandlers(){
     if(confirmVisible){ if(confirmIdx>0) confirmIdx--; return; }
 
     if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
-      if(mainIdx + 1 < MAIN_COUNT){
-        mainIdx++;            // LEFT
-      }
+      mainIdx = (uint8_t)((mainIdx + 1) % MAIN_COUNT);   // 0→1→2→3→0
       return;
     }
+
 
     // If we're in idle screen, cycle the idle case pages
     if (uiMode == UI_IDLE) {
@@ -536,11 +561,10 @@ static void setupButtonHandlers(){
     if(confirmVisible){ if(confirmIdx<2) confirmIdx++; return; }
 
     if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
-      if(mainIdx > 0){
-        mainIdx--;            // RIGHT
-      }
+      mainIdx = (uint8_t)((mainIdx + MAIN_COUNT - 1) % MAIN_COUNT);  // 0→3→2→1→0
       return;
     }
+
 
     // If we're in idle screen, cycle the idle case pages
     if (uiMode == UI_IDLE) {

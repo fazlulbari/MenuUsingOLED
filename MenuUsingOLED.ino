@@ -39,8 +39,7 @@ void setup() {
     Serial.println("ERROR: UI task create failed (heap/stack too small).");
     for(;;); // halt
   }
-
-  // *** IMPORTANT: start scheduler on STM32FreeRTOS ***
+  
   vTaskStartScheduler();
 
 }
