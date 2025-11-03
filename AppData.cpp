@@ -2,15 +2,16 @@
 #include <string.h>
 
 // ===== Live status =====
-int16_t statusTempC = 12;
-int16_t statusVinV  = 12;
+float statusTempC = 12;
+float statusVinV  = 12;
 // Fan telemetry (provide these from your measurement code)
-int16_t fan1Current_mA = 12;
-int16_t fan2Current_mA = 12;
-int16_t fan1Power_W = 12;
-int16_t fan2Power_W = 12;
-int16_t fan1Run_m = 12;
-int16_t fan2Run_m = 12;
+float fan1Current_mA = 12.5;
+float fan2Current_mA = 12.5;
+float fan1Power_W = 12.5;
+float fan2Power_W = 12.5;
+float fan1Run_m = 12.5;
+float fan2Run_m = 12.5;
+bool Light_Condition = true;
 
 // Alarms (shown in menu; not actually committed as settings)
 bool alarmDoor=true, alarmWater=false, alarmSmoke=true, alarmTemp=false, alarmFanFault=true, alarmAviation = false;
@@ -58,14 +59,14 @@ void stageApply()   { gLive  = gStage; }
 void stageDiscard() { gStage = gLive;  }
 
 // ===== Demo arrays + timing =====
-static int Temperature[] = {27, 30, 32};
-static int Voltage[]     = {27, 30, 32};
-static int Fan1Current[] = {27, 30, 32};
-static int Fan2Current[] = {27, 30, 32};
-static int Fan1Power[] = {27, 30, 32};
-static int Fan2Power[] = {27, 30, 32};
-static int Fan1Run[] = {27, 30, 32};
-static int Fan2Run[] = {27, 30, 32};
+static float Temperature[] = {27.5,30.7,32.2};
+static float Voltage[]     = {27.5,30.7,32.2};
+static float Fan1Current[] = {27.5,30.7,32.2};
+static float Fan2Current[] = {27.5,30.7,32.2};
+static float Fan1Power[] = {27.5,30.7,32.2};
+static float Fan2Power[] = {27.5,30.7,32.2};
+static float Fan1Run[] = {27.5,30.7,32.2};
+static float Fan2Run[] = {27.5,30.7,32.2};
 static uint8_t demoIdx = 0;
 static unsigned long lastUpdate = 0;
 static const unsigned long UPDATE_MS = 5000; // 5s
@@ -95,6 +96,7 @@ void demoDataTick(unsigned long now) {
   alarmTemp     = !alarmTemp;
   alarmFanFault = !alarmFanFault;
   alarmAviation = !alarmAviation;
+  Light_Condition = !Light_Condition;
 
   demoIdx = (uint8_t)((demoIdx + 1) % 3);
 }

@@ -61,6 +61,7 @@ static uint8_t winStart = 0;       // index of left tile in the window
 
 // ----- Idle page cycling -----
 static uint8_t idleCaseIndex = 0; 
+static uint8_t MaxDataPage  = 4; 
 
 static inline void ensureWindow(){
   // keep mainIdx visible inside [winStart, winStart+WIN_SIZE-1]
@@ -325,9 +326,9 @@ static void openMainFromIndex(uint8_t idx){
 
 static void drawMainMenuHorizontal(){
   // Title
-  u8g2.setFont(u8g2_font_5x7_tr);
+  u8g2.setFont(u8g2_font_7x14_tr);
   u8g2.setDrawColor(1);
-  u8g2.drawStr(55, 9, "Main");
+  u8g2.drawStr(50, 12, "Main");
 
   // ----- geometry -----
   const int Y_TOP = 14;
@@ -379,15 +380,14 @@ static void drawMainMenuHorizontal(){
   {
     const int x = X0 + 4;
     const int y = Y_TOP;
-    u8g2.drawFrame(x, y, S_W, S_H);
     // icon
     const int ix = x + (S_W - S_ICON_W)/2;
     const int iy = y + 4;
-    u8g2.drawXBMP(ix, iy, S_ICON_W, S_ICON_H, icon16For(left));
+    u8g2.drawXBMP(ix, iy +5, S_ICON_W, S_ICON_H, icon16For(left));
     // label
     u8g2.setFont(u8g2_font_4x6_tr);
     int w = u8g2.getStrWidth(labelFor(left));
-    u8g2.drawStr(x + (S_W - w)/2, y + S_H - 2, labelFor(left));
+    u8g2.drawStr(x + (S_W - w)/2, y + S_H + 5, labelFor(left));
   }
 
   // ----- draw CENTER selected tile (filled) -----
@@ -415,15 +415,14 @@ static void drawMainMenuHorizontal(){
   {
     const int x = X0 + S_W + GAP_CS + C_W + GAP_CS - 4;
     const int y = Y_TOP;
-    u8g2.drawFrame(x, y, S_W, S_H);
     // icon
     const int ix = x + (S_W - S_ICON_W)/2;
     const int iy = y + 4;
-    u8g2.drawXBMP(ix, iy, S_ICON_W, S_ICON_H, icon16For(right));
+    u8g2.drawXBMP(ix, iy + 5, S_ICON_W, S_ICON_H, icon16For(right));
     // label
     u8g2.setFont(u8g2_font_4x6_tr);
     int w = u8g2.getStrWidth(labelFor(right));
-    u8g2.drawStr(x + (S_W - w)/2, y + S_H - 2, labelFor(right));
+    u8g2.drawStr(x + (S_W - w)/2, y + S_H + 5, labelFor(right));
   }
 
 }
@@ -433,98 +432,197 @@ static void drawMainMenuHorizontal(){
 
 // ===== Drawing helpers =====
 static void drawIdleScreen(){
-  u8g2.setFont(u8g2_font_5x7_tr);
+  u8g2.setFont(u8g2_font_7x14_tr);
   u8g2.setDrawColor(1);
   u8g2.setFontMode(1);
   u8g2.setBitmapMode(1);
-  u8g2.drawStr(2,9,"SARBS ODCC Plus Status");
-  char line[24];
-
+  u8g2.drawStr(2,12,"SARBS TCU");
+  u8g2.setFont(u8g2_font_6x12_tr);
   switch (idleCaseIndex) {
+
     case 0: // Temp / Vin
-      snprintf(line, sizeof(line), "Temp: %d C", statusTempC);
-      u8g2.drawStr(2,20,line);
-      snprintf(line, sizeof(line), "Vin : %d V", statusVinV);
-      u8g2.drawStr(2,30,line);
+      u8g2.setCursor(2, 26);
+      u8g2.print("Temp:");
+      u8g2.print(statusTempC, 2);
+      u8g2.print("C");
+
+      u8g2.setCursor(2, 40);
+      u8g2.print("Vin :");
+      u8g2.print(statusVinV, 2);
+      u8g2.print("V");
       break;
 
     case 1: // F1C / F2C (mA)
-      snprintf(line, sizeof(line), "F1C: %dmA", fan1Current_mA);
-      u8g2.drawStr(2,20,line);
-      snprintf(line, sizeof(line), "F2C: %dmA", fan2Current_mA);
-      u8g2.drawStr(2,30,line);
+      u8g2.setCursor(2, 26);
+      u8g2.print("F1C :");
+      u8g2.print(fan1Current_mA, 2);
+      u8g2.print("mA");
+
+      u8g2.setCursor(2, 40);
+      u8g2.print("F2C :");
+      u8g2.print(fan2Current_mA, 2);
+      u8g2.print("mA");
       break;
 
     case 2: // F1P / F2P (W)
-      snprintf(line, sizeof(line), "F1P: %dW", fan1Power_W);
-      u8g2.drawStr(2,20,line);
-      snprintf(line, sizeof(line), "F2P: %dW", fan2Power_W);
-      u8g2.drawStr(2,30,line);
+      u8g2.setCursor(2, 26);
+      u8g2.print("F1P :");
+      u8g2.print(fan1Power_W, 2);
+      u8g2.print("W");
+
+      u8g2.setCursor(2, 40);
+      u8g2.print("F2P :");
+      u8g2.print(fan2Power_W, 2);
+      u8g2.print("W");
+      break;
+
+    case 3: // F1 / F2 (M)
+      u8g2.setCursor(2, 26);
+      u8g2.print("F1  :");
+      u8g2.print(fan1Run_m, 2);
+      u8g2.print("M");
+
+      u8g2.setCursor(2, 40);
+      u8g2.print("F2  :");
+      u8g2.print(fan2Run_m, 2);
+      u8g2.print("M");
       break;
   }
 
-  snprintf(line,sizeof(line),"F1: %dM",fan1Run_m); u8g2.drawStr(80,35,line); 
-  snprintf(line,sizeof(line),"F2: %dM",fan2Run_m); u8g2.drawStr(80,65,line);
 
-  if(alarmDoor == 1){     u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  }
-  if(alarmWater == 1){    u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16); }
-  if(alarmSmoke == 1){    u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16); }
-  if(alarmTemp == 1){     u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); }
-  if(alarmFanFault == 1){ u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  }
-  if(alarmAviation == 1){ u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16); }
-  // u8g2.drawXBMP(0, 36, 16, 16, ICON_DOOR_16);  
-  // u8g2.drawXBMP(24, 36, 16, 16, ICON_WATER_16);
-  // u8g2.drawXBMP(48, 36, 16, 16, ICON_SMOKE_16);
-  // u8g2.drawXBMP(14, 48, 16, 16, ICON_FIRE_16); 
-  // u8g2.drawXBMP(36, 49, 16, 16, ICON_FAN_16);  
-  // u8g2.drawXBMP(60, 49, 16, 16, ICON_LIGHT_16);
+  if(Light_Condition == true){
+    u8g2.drawXBMP(U8_Width-16-6, 2, 16, 16, ICON_SUM_16); 
+  }
+  else{
+    u8g2.drawXBMP(U8_Width-16-6, 2, 16, 16, ICON_MOON_16); 
+  }
+
+  if(alarmDoor == 1){     u8g2.drawXBMP(0,  44, 16, 16, ICON_DOOR_16); }
+  if(alarmWater == 1){    u8g2.drawXBMP(28, 44, 16, 16, ICON_WATER_16); }
+  if(alarmSmoke == 1){    u8g2.drawXBMP(59, 44, 16, 16, ICON_SMOKE_16); }
+  if(alarmTemp == 1){     u8g2.drawXBMP(16, 48, 16, 16, ICON_FIRE_16); }
+  if(alarmFanFault == 1){ u8g2.drawXBMP(42, 48, 16, 16, ICON_FAN_16);  }
+  if(alarmAviation == 1){ u8g2.drawXBMP(75, 48, 16, 16, ICON_LIGHT_16); }
+  // u8g2.drawXBMP(0,  44, 16, 16, ICON_DOOR_16);  
+  // u8g2.drawXBMP(28, 44, 16, 16, ICON_WATER_16);
+  // u8g2.drawXBMP(59, 44, 16, 16, ICON_SMOKE_16);
+  // u8g2.drawXBMP(16, 48, 16, 16, ICON_FIRE_16); 
+  // u8g2.drawXBMP(42, 48, 16, 16, ICON_FAN_16);  
+  // u8g2.drawXBMP(75, 48, 16, 16, ICON_LIGHT_16);
   fans.draw();
 }
 
 static void drawConfirmDialog(){
-  u8g2.setDrawColor(0); u8g2.drawBox(0,0,U8_Width,U8_Height);
+  u8g2.setDrawColor(0); 
+  u8g2.drawBox(0,0,U8_Width,U8_Height);
   u8g2.setDrawColor(1);
-  const int w=114,h=48,x=(U8_Width-w)/2,y=(U8_Height-h)/2;
+
+  // Bigger title for readability
+  const int w=116, h=54;
+  const int x=(U8_Width-w)/2, y=(U8_Height-h)/2;
   u8g2.drawFrame(x,y,w,h);
-  u8g2.setFont(u8g2_font_5x7_tr);
-  u8g2.drawStr(x+8,y+12,"Apply changes?");
-  const char* opts[3]={"Apply & Exit","Discard & Exit","Cancel"};
-  for(int k=0;k<3;++k){
-    int yy=y+24+k*10;
+
+  u8g2.setFont(u8g2_font_7x13B_mf);
+  u8g2.drawStr(x+10, y+13, "Confirm");
+
+  // 4 options now
+  static const char* opts[4] = {
+    "Apply",
+    "Apply & Exit",
+    "Discard & Exit",
+    "Cancel"
+  };
+
+  // List items
+  u8g2.setFont(u8g2_font_6x10_tf);
+  for(int k=0;k<4;++k){
+    int yy = y + 22 + k*10;
     if(confirmIdx==k){
-      u8g2.setDrawColor(1); u8g2.drawBox(x+6,yy-7,w-12,9);
-      u8g2.setDrawColor(0); u8g2.drawStr(x+10,yy,opts[k]);
+      // highlight row
+      u8g2.setDrawColor(1); 
+      u8g2.drawBox(x+6, yy-8, w-12, 11);
+      u8g2.setDrawColor(0); 
+      u8g2.drawStr(x+10, yy, opts[k]);
       u8g2.setDrawColor(1);
     } else {
-      u8g2.drawStr(x+10,yy,opts[k]);
+      u8g2.drawStr(x+10, yy, opts[k]);
     }
   }
 }
 
+
 static void drawPasswordDialog(){
-  u8g2.setDrawColor(0); u8g2.drawBox(0,0,U8_Width,U8_Height);
+  // Fullscreen dark backdrop
+  u8g2.setDrawColor(0);
+  u8g2.drawBox(0, 0, U8_Width, U8_Height);
   u8g2.setDrawColor(1);
-  const int w=118,h=46,x=(U8_Width-w)/2,y=(U8_Height-h)/2;
-  u8g2.drawFrame(x,y,w,h);
-  u8g2.setFont(u8g2_font_5x7_tr);
-  u8g2.drawStr(x+22,y+11,"Enter Password");
-  const int boxW=18, boxH=14, gap=6, totalW=4*boxW+3*gap;
-  const int startX=x+(w-totalW)/2, baseY=y+20;
+
+  // ===== Title (bigger) =====
+  // Use a bold, taller font; 7x13B is crisp on 128x64
+  u8g2.setFont(u8g2_font_7x13B_mf);
+  const char* title = "Enter Password";
+  int tw = u8g2.getStrWidth(title);
+  int tx = (U8_Width - tw) / 2;
+  int ty = 14;                  // baseline
+  u8g2.drawStr(tx, ty, title);
+
+  // ===== Digit boxes (bigger) =====
+  // 4 boxes, centered
+  const int boxW = 22;
+  const int boxH = 18;
+  const int gap  = 8;
+  const int totalW = 4*boxW + 3*gap;
+  const int startX = (U8_Width - totalW) / 2;
+  const int baseY  = 24;        // top of digit row
+
+  // Bigger digit font
+  u8g2.setFont(u8g2_font_7x13B_mf);
+
   for(int i=0;i<4;i++){
-    int bx=startX+i*(boxW+gap);
-    if(i==passIndex){
-      u8g2.drawBox(bx,baseY,boxW,boxH);
-      u8g2.setDrawColor(0); char d[2]; d[0]='0'+passDigits[i]; d[1]=0; u8g2.drawStr(bx+(boxW/2-3),baseY+10,d);
-      u8g2.setDrawColor(1); u8g2.drawFrame(bx,baseY,boxW,boxH);
+    int bx = startX + i*(boxW + gap);
+    // selected -> filled box (inverted digits), otherwise framed box
+    if(i == passIndex){
+      u8g2.drawBox(bx, baseY, boxW, boxH);
+      u8g2.setDrawColor(0);
+      char d[2]; d[0] = '0' + passDigits[i]; d[1] = 0;
+      // center digit inside the box
+      int dw = u8g2.getStrWidth(d);
+      int dx = bx + (boxW - dw)/2;
+      int dy = baseY + (boxH + 7)/2; // vertical centering tuned for 7x13B
+      u8g2.drawStr(dx, dy, d);
+      u8g2.setDrawColor(1);
     } else {
-      u8g2.drawFrame(bx,baseY,boxW,boxH);
-      char d[2]; d[0]='0'+passDigits[i]; d[1]=0; u8g2.drawStr(bx+(boxW/2-3),baseY+10,d);
+      u8g2.drawFrame(bx, baseY, boxW, boxH);
+      char d[2]; d[0] = '0' + passDigits[i]; d[1] = 0;
+      int dw = u8g2.getStrWidth(d);
+      int dx = bx + (boxW - dw)/2;
+      int dy = baseY + (boxH + 7)/2;
+      u8g2.drawStr(dx, dy, d);
     }
   }
-  u8g2.setFont(u8g2_font_4x6_tr);
-  if(passWrong) u8g2.drawStr(x+10,y+h-4,"Wrong Password. Try again");
-  else          u8g2.drawStr(x+4,y+h-4,"Up/Dn=edit ENT=next ESC=prev");
+
+  // ===== Bottom hint / error (larger than before) =====
+  // Use 6x10 for better readability; center it
+  u8g2.setFont(u8g2_font_4x6_tf);
+  const char* okHint   = "Up/Dn=Edit ENT=Next ESC=Prev";
+  const char* errHint  = "Wrong password.Try again";
+  const char* msg = passWrong ? errHint : okHint;
+  int mw = u8g2.getStrWidth(msg);
+  int mx = (U8_Width - mw) / 2;
+  int my = U8_Height - 6;     // a bit above bottom
+  if(passWrong){
+    // draw a subtle invert band behind the error for emphasis
+    int pad = 2;
+    u8g2.setDrawColor(1);
+    u8g2.drawBox(mx - pad, my - 10, mw + 2*pad, 12);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(mx, my, msg);
+    u8g2.setDrawColor(1);
+  } else {
+    u8g2.drawStr(mx, my, msg);
+  }
 }
+
 
 // ===== Actions =====
 static result doFactoryReset(eventMask, prompt&){
@@ -537,7 +635,7 @@ static void setupButtonHandlers(){
   btnUp.attachClick([](){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passDigits[passIndex]=(uint8_t)((passDigits[passIndex]+1)%10); return; }
-    if(confirmVisible){ if(confirmIdx>0) confirmIdx--; return; }
+    if(confirmVisible){ if(confirmIdx<3) confirmIdx++; return; }
 
     if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
       mainIdx = (uint8_t)((mainIdx + 1) % MAIN_COUNT);   // 0→1→2→3→0
@@ -547,7 +645,7 @@ static void setupButtonHandlers(){
 
     // If we're in idle screen, cycle the idle case pages
     if (uiMode == UI_IDLE) {
-      idleCaseIndex = (uint8_t)((idleCaseIndex + 1) % 3);
+      idleCaseIndex = (uint8_t)((idleCaseIndex + 1) % MaxDataPage);
       return;                 // don't pass to menu nav when idle
     }
 
@@ -558,7 +656,7 @@ static void setupButtonHandlers(){
   btnDown.attachClick([](){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passDigits[passIndex]=(uint8_t)((passDigits[passIndex]+9)%10); return; }
-    if(confirmVisible){ if(confirmIdx<2) confirmIdx++; return; }
+    if(confirmVisible){ if(confirmIdx>0) confirmIdx--; return; }
 
     if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
       mainIdx = (uint8_t)((mainIdx + MAIN_COUNT - 1) % MAIN_COUNT);  // 0→3→2→1→0
@@ -568,7 +666,7 @@ static void setupButtonHandlers(){
 
     // If we're in idle screen, cycle the idle case pages
     if (uiMode == UI_IDLE) {
-      idleCaseIndex = (uint8_t)((idleCaseIndex +3 - 1) % 3);
+      idleCaseIndex = (uint8_t)((idleCaseIndex +MaxDataPage - 1) % MaxDataPage);
       return;                 // don't pass to menu nav when idle
     }
 
@@ -580,9 +678,28 @@ static void setupButtonHandlers(){
     lastInputMs=millis();
     if(passwordVisible){ passWrong=false; passIndex=(uint8_t)((passIndex+1)%4); return; }
     if(confirmVisible){
-      if(confirmIdx==0) stageApply();
-      if(confirmIdx==0||confirmIdx==1){ goIdle(); return; }
-      confirmVisible=false; return;
+      switch (confirmIdx){
+        case 0: // Apply (stay)
+          stageApply();
+          confirmVisible = false;       // close dialog, remain in menu
+          break;
+
+        case 1: // Apply & Exit
+          stageApply();
+          goIdle();                     // exit to idle (locks settings again)
+          break;
+
+        case 2: // Discard & Exit
+          stageDiscard();
+          goIdle();
+          break;
+
+        case 3: // Cancel
+        default:
+          confirmVisible = false;       // just close dialog
+          break;
+      }
+      return;
     }
 
     if(!passwordVisible && !confirmVisible && uiMode==UI_MENU && atRoot()){
@@ -681,12 +798,10 @@ void uiSetup(){
   u8g2.begin();
   u8g2.setFont(fontName);
 
-  const uint16_t W=u8g2.getDisplayWidth();
-  const uint16_t H=u8g2.getDisplayHeight();
-  fans.addFan(W-16-26,H-16-38,images,4,16,16,50);
-  fans.addFan(W-16-5, H-16-38,images,4,16,16,150);
-  fans.addFan(W-16-26,H-16-10,images,4,16,16,450);
-  fans.addFan(W-16-5, H-16-10,images,4,16,16,1350);
+  fans.addFan(U8_Width-16-20,U8_Height-16-20,images,4,16,16,50);
+  fans.addFan(U8_Width-16-2, U8_Height-16-20,images,4,16,16,150);
+  fans.addFan(U8_Width-16-20,U8_Height-16-2,images,4,16,16,450);
+  fans.addFan(U8_Width-16-2, U8_Height-16-2,images,4,16,16,1350);
 
   lastInputMs=millis();
   lastFrameMs=0;

@@ -2,16 +2,17 @@
 #include <stdint.h>
 
 // ===== Live status (read-only in menu) =====
-extern int16_t statusTempC;
-extern int16_t statusVinV;
+extern float statusTempC;
+extern float statusVinV;
 
 // Fan telemetry (provide these from your measurement code)
-extern int16_t fan1Current_mA;
-extern int16_t fan2Current_mA;
-extern int16_t fan1Power_W;
-extern int16_t fan2Power_W;
-extern int16_t fan1Run_m;
-extern int16_t fan2Run_m;
+extern float fan1Current_mA;
+extern float fan2Current_mA;
+extern float fan1Power_W;
+extern float fan2Power_W;
+extern float fan1Run_m;
+extern float fan2Run_m;
+extern bool Light_Condition;
 
 // Alarms (shown in menu but not committed; you can keep them read-only in logic)
 extern bool alarmDoor, alarmWater, alarmSmoke, alarmTemp, alarmFanFault, alarmAviation;

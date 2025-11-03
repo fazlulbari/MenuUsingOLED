@@ -25,6 +25,8 @@ extern const uint8_t ICON_STATUS_16[]    ; // 16x16
 extern const uint8_t ICON_ALARMS_16[]    ; // 16x16
 extern const uint8_t ICON_SETTINGS_16[]  ; // 16x16
 extern const uint8_t ICON_ABOUT_16[]     ; // 16x16
+extern const uint8_t ICON_SUM_16[]       ; // 16x16
+extern const uint8_t ICON_MOON_16[]      ; // 16x16
 
 extern const uint8_t* images[4];  // declaration only
 #endif
