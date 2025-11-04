@@ -520,7 +520,7 @@ static void drawConfirmDialog(){
   // Bigger title for readability
   const int w=116, h=54;
   const int x=(U8_Width-w)/2, y=(U8_Height-h)/2;
-  u8g2.drawFrame(x,y,w,h);
+  u8g2.drawFrame(x ,y,w,h);
 
   u8g2.setFont(u8g2_font_7x13B_mf);
   u8g2.drawStr(x+10, y+13, "Confirm");
@@ -540,7 +540,7 @@ static void drawConfirmDialog(){
     if(confirmIdx==k){
       // highlight row
       u8g2.setDrawColor(1); 
-      u8g2.drawBox(x+6, yy-8, w-12, 11);
+      u8g2.drawBox(x+6, yy-10, w-12, 11);
       u8g2.setDrawColor(0); 
       u8g2.drawStr(x+10, yy, opts[k]);
       u8g2.setDrawColor(1);
